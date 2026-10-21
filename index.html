@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ShuffleTok">
+  <title>ShuffleTok</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    :root { color-scheme: dark; --bg:#080808; --panel:#171717; --muted:#a3a3a3; --line:#303030; --accent:#fe2c55; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:#fff; font:16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button, input { font:inherit; }
+    button { cursor:pointer; border:0; }
+    .app { min-height:100dvh; max-width:680px; margin:0 auto; padding-bottom:env(safe-area-inset-bottom); display:flex; flex-direction:column; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px 10px; position:sticky; top:0; z-index:4; background:#080808ed; backdrop-filter:blur(12px); }
+    .brand { font-size:23px; font-weight:850; letter-spacing:-.8px; }
+    .brand span { color:var(--accent); }
+    .tabs { display:flex; gap:6px; background:#1c1c1c; padding:4px; border-radius:999px; }
+    .tab { padding:9px 13px; color:#aaa; border-radius:999px; background:transparent; font-weight:700; }
+    .tab.active { background:#fff; color:#111; }
+    .toolbar { display:flex; align-items:center; gap:8px; padding:0 14px 12px; }
+    .btn { background:#252525; color:white; border:1px solid #3b3b3b; padding:10px 12px; border-radius:12px; font-weight:650; }
+    .btn.primary { background:var(--accent); border-color:var(--accent); }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+    .toolbar .spacer { flex:1; }
+    .stage { padding:0 12px; flex:1; display:flex; flex-direction:column; }
+    .video-card { min-height:40dvh; max-height:58dvh; flex:1; background:linear-gradient(145deg,#252525,#101010); border:1px solid #303030; border-radius:20px; overflow:hidden; display:flex; flex-direction:column; position:relative; }
+    .video-area { flex:1; min-height:240px; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; background:radial-gradient(ellipse at 50% 35%,#343434 0%,#191919 40%,#0c0c0c 100%); }
+    .video-area a { color:#fff; }
+    .play { font-size:42px; margin-bottom:10px; }
+    .video-hint { color:#aaa; font-size:13px; line-height:1.5; max-width:270px; }
+    .meta { padding:16px 16px 17px; background:#101010; }
+    .creator { color:#bdbdbd; font-size:13px; margin-bottom:7px; }
+    .video-title { font-size:18px; font-weight:800; margin:0 0 7px; line-height:1.25; }
+    .caption { font-size:14px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; color:#e5e5e5; }
+    .actions { display:flex; gap:8px; margin-top:13px; }
+    .actions .btn { flex:1; }
+    .footer { padding:12px 14px 20px; color:var(--muted); font-size:12px; text-align:center; line-height:1.45; }
+    .empty { margin:auto; text-align:center; padding:30px 20px 50px; max-width:390px; }
+    .empty .emoji { font-size:46px; }
+    .empty h2 { margin:14px 0 8px; }
+    .empty p { color:#aaa; line-height:1.5; }
+    .hidden { display:none !important; }
+    .comment-panel { position:fixed; inset:0; background:#0009; z-index:10; display:flex; align-items:flex-end; }
+    .sheet { width:100%; max-width:680px; margin:0 auto; max-height:78dvh; background:#171717; border-radius:22px 22px 0 0; padding:12px 18px calc(20px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; }
+    .sheet-head { display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--line); }
+    .sheet-head h2 { margin:0; font-size:18px; }
+    .comments { overflow:auto; padding:8px 0; }
+    .comment { padding:12px 0; border-bottom:1px solid #2a2a2a; }
+    .comment-user { font-size:13px; font-weight:800; color:#bbb; margin-bottom:5px; }
+    .comment-text { font-size:14px; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .notice { background:#211b0c; border:1px solid #5b4718; color:#f2d89a; padding:11px 13px; margin:0 14px 12px; border-radius:12px; font-size:12px; line-height:1.4; }
+    .file-label { display:inline-flex; align-items:center; justify-content:center; }
+    input[type=file] { display:none; }
+    @media (min-width:600px) { .video-card { max-height:620px; } .video-area { min-height:340px; } }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">Shuffle<span>Tok</span></div>
+    <nav class="tabs" aria-label="Collecties">
+      <button class="tab active" id="likedTab">Liked</button>
+      <button class="tab" id="savedTab">Saved</button>
+    </nav>
+  </header>
+  <div class="toolbar">
+    <label class="btn primary file-label" for="jsonInput">＋ Import JSON</label>
+    <input id="jsonInput" type="file" accept=".json,.txt,application/json,text/plain">
+    <button class="btn" id="shuffleBtn">⤨ Shuffle</button>
+    <div class="spacer"></div>
+    <button class="btn" id="commentsTopBtn" disabled>Comments</button>
+  </div>
+  <div id="notice" class="notice hidden"></div>
+  <main class="stage" id="stage">
+    <section class="empty" id="empty">
+      <div class="emoji">↗</div>
+      <h2>Importeer je TikTok-gegevens</h2>
+      <p>Upload het JSON-bestand uit je TikTok-data-export. ShuffleTok probeert video-links, captions, namen en beschikbare reacties eruit te halen.</p>
+      <label class="btn primary file-label" for="jsonInput">Kies JSON-bestand</label>
+      <p style="font-size:12px">Je bestand wordt lokaal in deze app verwerkt. Er wordt niets naar een server gestuurd.</p>
+    </section>
+    <section id="player" class="hidden">
+      <div class="video-card">
+        <div class="video-area" id="videoArea">
+          <div>
+            <div class="play">▶</div>
+            <div class="video-hint">TikTok-video's worden geopend via de originele link. De export bevat meestal geen videobestanden.</div>
+          </div>
+        </div>
+        <div class="meta">
+          <div class="creator" id="creator"></div>
+          <h1 class="video-title" id="videoTitle">TikTok-video</h1>
+          <div class="caption" id="caption"></div>
+          <div class="actions">
+            <button class="btn primary" id="openVideoBtn">Open TikTok ↗</button>
+            <button class="btn" id="commentsBtn">Comments (0)</button>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar" style="padding:12px 0 0">
+        <button class="btn" id="prevBtn">↑ Vorige</button>
+        <button class="btn" id="nextBtn">↓ Volgende</button>
+        <div class="spacer"></div>
+        <span id="counter" style="font-size:12px;color:#aaa"></span>
+      </div>
+    </section>
+  </main>
+  <div class="footer">Read-only · Shuffle zonder herhalingen · Liked en Saved gescheiden</div>
+</div>
+<div class="comment-panel hidden" id="commentPanel" role="dialog" aria-modal="true" aria-label="Comments">
+  <section class="sheet">
+    <div class="sheet-head"><h2 id="commentsHeading">Comments</h2><button class="btn" id="closeComments">Sluiten ✕</button></div>
+    <div class="comments" id="commentsList"></div>
+  </section>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let collection = 'liked';
+  let data = { liked: [], saved: [] };
+  let queue = [], position = 0, current = null;
+  const norm = s => (s == null ? '' : String(s)).trim();
+  const asArray = x => Array.isArray(x) ? x : (x && typeof x === 'object' ? Object.values(x) : []);
+  function findUrl(obj) {
+    if (!obj || typeof obj !== 'object') return '';
+    for (const [k,v] of Object.entries(obj)) {
+      if (typeof v === 'string' && /https?:\/\/(?:www\.)?(?:vm\.tiktok\.com|vt\.tiktok\.com|tiktok\.com)\//i.test(v)) return v;
+    }
+    return '';
+  }
+  function getText(obj, patterns) {
+    for (const [k,v] of Object.entries(obj || {})) {
+      if (patterns.some(p => p.test(k)) && (typeof v === 'string' || typeof v === 'number')) {
+        const val = norm(v); if (val) return val;
+      }
+    }
+    return '';
+  }
+  function extractComments(obj) {
+    const out = [];
+    function walk(node, depth=0) {
+      if (!node || depth > 5 || out.length > 150) return;
+      if (Array.isArray(node)) { node.forEach(x => walk(x, depth+1)); return; }
+      if (typeof node !== 'object') return;
+      const keys = Object.keys(node);
+      const text = getText(node, [/comment.?text/i, /^text$/i, /comment.?content/i]);
+      const user = getText(node, [/user.?name/i, /nickname/i, /author/i, /unique.?id/i]);
+      if (text && (keys.some(k => /comment/i.test(k)) || user)) out.push({user: user || 'TikTok-gebruiker', text});
+      for (const [k,v] of Object.entries(node)) if (v && typeof v === 'object') walk(v, depth+1);
+    }
+    walk(obj);
+    const seen = new Set();
+    return out.filter(c => { const key=c.user+'|'+c.text; if(seen.has(key)) return false; seen.add(key); return true; }).slice(0,100);
+  }
+  function parseItems(parsed) {
+    const items = [];
+    const seen = new Set();
+    function add(obj, defaultKind='liked') {
+      if (!obj || typeof obj !== 'object') return;
+      const url = findUrl(obj);
+      if (!url) return;
+      const caption = getText(obj, [/desc/i, /caption/i, /share.?text/i, /title/i, /^text$/i]);
+      const creator = getText(obj, [/nickname/i, /user.?name/i, /unique.?id/i, /author/i]);
+      const title = getText(obj, [/title/i, /video.?name/i]) || (caption ? caption.slice(0,90) : 'TikTok-video');
+      const kindText = Object.keys(obj).join(' ').toLowerCase();
+      const kind = /favorite|saved|bookmark|collect/i.test(kindText) ? 'saved' : defaultKind;
+      const key = url;
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({url, caption, creator, title, kind, comments: extractComments(obj)});
+    }
+    function walk(node, path='', depth=0) {
+      if (!node || depth>8) return;
+      if (Array.isArray(node)) {
+        node.forEach(x => walk(x,path,depth+1));
+      } else if (typeof node === 'object') {
+        const p = path + ' ' + Object.keys(node).join(' ');
+        if (findUrl(node)) add(node, /favorite|saved|bookmark|collect/i.test(p) ? 'saved' : 'liked');
+        for (const [k,v] of Object.entries(node)) if (v && typeof v === 'object') walk(v, path+' '+k, depth+1);
+      }
+    }
+    walk(parsed);
+    return items;
+  }
+  function shuffle() {
+    const arr = [...(data[collection] || [])];
+    for (let i=arr.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+    queue = arr; position = 0; render();
+  }
+  function setCollection(which) {
+    collection = which;
+    $('likedTab').classList.toggle('active',which==='liked');
+    $('savedTab').classList.toggle('active',which==='saved');
+    shuffle();
+  }
+  function render() {
+    const list = data[collection] || [];
+    $('empty').classList.toggle('hidden', queue.length > 0);
+    $('player').classList.toggle('hidden', queue.length === 0);
+    $('commentsTopBtn').disabled = !current;
+    if (!queue.length) {
+      current = null;
+      $('notice').classList.toggle('hidden', !data.liked.length && !data.saved.length);
+      if (data.liked.length || data.saved.length) $('notice').textContent = `Geen video's in ${collection === 'liked' ? 'Liked' : 'Saved'}. Importeer eventueel een aparte export of controleer of dit bestand deze collectie bevat.`;
+      return;
+    }
+    if (position >= queue.length) position = 0;
+    current = queue[position];
+    $('creator').textContent = current.creator ? '@' + current.creator.replace(/^@/,'') : 'Originele TikTok';
+    $('videoTitle').textContent = current.title || 'TikTok-video';
+    $('caption').textContent = current.caption || 'Geen caption gevonden in de geïmporteerde gegevens.';
+    $('openVideoBtn').onclick = () => window.open(current.url, '_blank', 'noopener,noreferrer');
+    $('commentsBtn').textContent = `Comments (${current.comments.length})`;
+    $('commentsTopBtn').disabled = false;
+    $('counter').textContent = `${position+1} / ${queue.length}`;
+    $('notice').classList.add('hidden');
+  }
+  function showComments() {
+    if (!current) return;
+    $('commentsHeading').textContent = `Comments (${current.comments.length})`;
+    const list = $('commentsList'); list.innerHTML = '';
+    if (!current.comments.length) {
+      const p = document.createElement('p'); p.style.color='#aaa'; p.textContent='Er zijn geen comments in dit JSON-bestand gevonden. TikTok bevat reacties meestal niet in de gewone data-export.'; list.appendChild(p);
+    } else current.comments.forEach(c => {
+      const div=document.createElement('div'); div.className='comment';
+      const u=document.createElement('div'); u.className='comment-user'; u.textContent='@'+c.user.replace(/^@/,'');
+      const t=document.createElement('div'); t.className='comment-text'; t.textContent=c.text;
+      div.append(u,t); list.appendChild(div);
+    });
+    $('commentPanel').classList.remove('hidden');
+  }
+  $('jsonInput').addEventListener('change', async e => {
+    const file=e.target.files && e.target.files[0]; if(!file) return;
+    try {
+      const text=await file.text();
+      const parsed=JSON.parse(text);
+      const items=parseItems(parsed);
+      if (!items.length) {
+        $('notice').textContent='Ik vond geen TikTok-links in dit JSON-bestand. Probeer het JSON-bestand dat bij je TikTok-export hoort, niet het ZIP-bestand zelf.';
+        $('notice').classList.remove('hidden'); return;
+      }
+      data={liked:items.filter(x=>x.kind==='liked'),saved:items.filter(x=>x.kind==='saved')};
+      // If export structure does not label saved separately, retain all items in Liked to avoid hiding them.
+      if (!data.liked.length && !data.saved.length) data.liked=items;
+      $('notice').textContent=`Import voltooid: ${data.liked.length} video(s) in Liked en ${data.saved.length} in Saved. Gegevens blijven op dit apparaat.`;
+      $('notice').classList.remove('hidden');
+      setCollection('liked');
+    } catch(err) {
+      $('notice').textContent='Dit bestand kon niet als JSON worden gelezen. Pak eerst het ZIP-bestand uit en kies een .json-bestand.';
+      $('notice').classList.remove('hidden');
+    }
+    e.target.value='';
+  });
+  $('likedTab').onclick=()=>setCollection('liked');
+  $('savedTab').onclick=()=>setCollection('saved');
+  $('shuffleBtn').onclick=shuffle;
+  $('nextBtn').onclick=()=>{if(!queue.length)return; if(position<queue.length-1){position++;render();}else{$('notice').textContent='Je hebt deze shuffle-wachtrij helemaal bekeken. Tik op Shuffle om opnieuw te beginnen.';$('notice').classList.remove('hidden');}};
+  $('prevBtn').onclick=()=>{if(!queue.length)return;position=Math.max(0,position-1);render();};
+  $('commentsBtn').onclick=showComments;
+  $('commentsTopBtn').onclick=showComments;
+  $('closeComments').onclick=()=>$('commentPanel').classList.add('hidden');
+  $('commentPanel').addEventListener('click',e=>{if(e.target===$('commentPanel'))$('commentPanel').classList.add('hidden');});
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
