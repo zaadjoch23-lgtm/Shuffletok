@@ -28,7 +28,20 @@
     .btn.primary { background:var(--accent); border-color:var(--accent); }
     .btn:disabled { opacity:.4; cursor:not-allowed; }
     .toolbar .spacer { flex:1; }
-    .stage { padding:0 12px; flex:1; display:flex; flex-direction:column; }
+    .stage { padding:0; flex:1; display:flex; flex-direction:column; min-height:0; }
+    #player { flex:1; min-height:0; display:flex; flex-direction:column; }
+    #player.hidden { display:none !important; }
+    .video-card { min-height:0; max-height:none; flex:1; border:0; border-radius:0; background:#000; }
+    .video-area { flex:1; min-height:0; padding:0; background:#000; position:relative; overflow:hidden; touch-action:pan-y; }
+    .video-area iframe { width:100%; height:100%; min-height:58dvh; border:0; background:#000; }
+    .video-fallback { padding:28px; max-width:340px; text-align:center; }
+    .video-fallback .play { font-size:44px; }
+    .meta { padding:12px 16px calc(12px + env(safe-area-inset-bottom)); }
+    .video-title { font-size:16px; }
+    .caption { max-height:72px; overflow:auto; }
+    .swipe-hint { font-size:11px; color:#888; text-align:center; padding:5px 0 0; }
+    .toolbar.feed-nav { padding:8px 12px calc(10px + env(safe-area-inset-bottom)) !important; }
+    @media (min-width:600px) { .video-area iframe { min-height:520px; } }
     .video-card { min-height:40dvh; max-height:58dvh; flex:1; background:linear-gradient(145deg,#252525,#101010); border:1px solid #303030; border-radius:20px; overflow:hidden; display:flex; flex-direction:column; position:relative; }
     .video-area { flex:1; min-height:240px; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; background:radial-gradient(ellipse at 50% 35%,#343434 0%,#191919 40%,#0c0c0c 100%); }
     .video-area a { color:#fff; }
@@ -87,11 +100,12 @@
     </section>
     <section id="player" class="hidden">
       <div class="video-card">
-        <div class="video-area" id="videoArea">
-          <div>
+        <div class="video-area" id="videoArea" aria-label="TikTok-video">
+          <div class="video-fallback" id="videoFallback">
             <div class="play">▶</div>
-            <div class="video-hint">TikTok-video's worden geopend via de originele link. De export bevat meestal geen videobestanden.</div>
+            <div class="video-hint">De video wordt hier geladen als TikTok insluiten toestaat.</div>
           </div>
+          <iframe id="videoFrame" class="hidden" title="TikTok-video" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
         </div>
         <div class="meta">
           <div class="creator" id="creator"></div>
@@ -103,12 +117,13 @@
           </div>
         </div>
       </div>
-      <div class="toolbar" style="padding:12px 0 0">
+      <div class="toolbar feed-nav">
         <button class="btn" id="prevBtn">↑ Vorige</button>
         <button class="btn" id="nextBtn">↓ Volgende</button>
         <div class="spacer"></div>
         <span id="counter" style="font-size:12px;color:#aaa"></span>
       </div>
+      <div class="swipe-hint">Veeg omhoog voor de volgende video · omlaag voor de vorige</div>
     </section>
   </main>
   <div class="footer">Read-only · Shuffle zonder herhalingen · Liked en Saved gescheiden</div>
@@ -222,6 +237,39 @@
     $('savedTab').classList.toggle('active',which==='saved');
     shuffle();
   }
+  function getVideoId(url) {
+    try {
+      const u = new URL(url);
+      const m = u.pathname.match(/\/video\/(\d+)/i);
+      if (m) return m[1];
+      const player = u.pathname.match(/\/player\/v1\/(\d+)/i);
+      if (player) return player[1];
+    } catch (_) {}
+    return '';
+  }
+  function loadVideo(item) {
+    const frame = $('videoFrame');
+    const fallback = $('videoFallback');
+    const id = getVideoId(item.url);
+    // TikTok's official player needs the numeric video ID; short links cannot be resolved client-side.
+    if (!id) {
+      frame.classList.add('hidden');
+      frame.removeAttribute('src');
+      fallback.classList.remove('hidden');
+      fallback.innerHTML = '<div class="play">↗</div><div class="video-hint">Deze exportlink is een korte link of bevat geen video-ID. Tik op “Open TikTok” om hem te bekijken. Lange links met /video/ kunnen direct in de feed laden.</div>';
+      return;
+    }
+    fallback.classList.add('hidden');
+    frame.classList.remove('hidden');
+    frame.src = `https://www.tiktok.com/player/v1/${id}?autoplay=1&controls=1&description=1&music_info=0&loop=0`;
+  }
+  function moveBySwipe(delta) {
+    if (!queue.length) return;
+    if (delta < 0) {
+      if (position < queue.length - 1) { position++; render(); }
+      else { $('notice').textContent='Je hebt deze shuffle-wachtrij helemaal bekeken. Tik op Shuffle om opnieuw te beginnen.'; $('notice').classList.remove('hidden'); }
+    } else if (position > 0) { position--; render(); }
+  }
   function render() {
     const list = data[collection] || [];
     $('empty').classList.toggle('hidden', queue.length > 0);
@@ -239,6 +287,7 @@
     $('videoTitle').textContent = current.title || 'TikTok-video';
     $('caption').textContent = current.caption || 'Geen caption gevonden in de geïmporteerde gegevens.';
     $('openVideoBtn').onclick = () => window.open(current.url, '_blank', 'noopener,noreferrer');
+    loadVideo(current);
     $('commentsBtn').textContent = `Comments (${current.comments.length})`;
     $('commentsTopBtn').disabled = false;
     $('counter').textContent = `${position+1} / ${queue.length}`;
@@ -289,6 +338,19 @@
   $('commentsTopBtn').onclick=showComments;
   $('closeComments').onclick=()=>$('commentPanel').classList.add('hidden');
   $('commentPanel').addEventListener('click',e=>{if(e.target===$('commentPanel'))$('commentPanel').classList.add('hidden');});
+  let touchStartX=0, touchStartY=0;
+  $('videoArea').addEventListener('touchstart', e => { if (e.touches.length) { touchStartX=e.touches[0].clientX; touchStartY=e.touches[0].clientY; } }, {passive:true});
+  $('videoArea').addEventListener('touchend', e => {
+    if (!e.changedTouches.length) return;
+    const dx=e.changedTouches[0].clientX-touchStartX;
+    const dy=e.changedTouches[0].clientY-touchStartY;
+    if (Math.abs(dy)>55 && Math.abs(dy)>Math.abs(dx)*1.2) moveBySwipe(dy);
+  }, {passive:true});
+  let wheelLock=false;
+  $('videoArea').addEventListener('wheel', e => {
+    if (wheelLock || Math.abs(e.deltaY)<25) return;
+    wheelLock=true; moveBySwipe(e.deltaY); setTimeout(()=>wheelLock=false,450);
+  }, {passive:true});
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
 </script>
