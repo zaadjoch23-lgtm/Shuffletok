@@ -128,9 +128,11 @@
   const norm = s => (s == null ? '' : String(s)).trim();
   const asArray = x => Array.isArray(x) ? x : (x && typeof x === 'object' ? Object.values(x) : []);
   function findUrl(obj) {
+    // TikTok exports use different hostnames and commonly name the field "Link".
+    // Search all string values, not only a small set of URL property names.
     if (!obj || typeof obj !== 'object') return '';
     for (const [k,v] of Object.entries(obj)) {
-      if (typeof v === 'string' && /https?:\/\/(?:www\.)?(?:vm\.tiktok\.com|vt\.tiktok\.com|tiktok\.com)\//i.test(v)) return v;
+      if (typeof v === 'string' && /https?:\/\/(?:[a-z0-9-]+\.)*(?:tiktok\.com|tiktokv\.com)\//i.test(v)) return v.trim();
     }
     return '';
   }
@@ -160,33 +162,54 @@
   }
   function parseItems(parsed) {
     const items = [];
-    const seen = new Set();
-    function add(obj, defaultKind='liked') {
+    const byUrl = new Map();
+    const isSavedPath = path => /favorite|favourite|saved|bookmark|collect/i.test(path);
+    function add(obj, path='') {
       if (!obj || typeof obj !== 'object') return;
       const url = findUrl(obj);
       if (!url) return;
       const caption = getText(obj, [/desc/i, /caption/i, /share.?text/i, /title/i, /^text$/i]);
       const creator = getText(obj, [/nickname/i, /user.?name/i, /unique.?id/i, /author/i]);
       const title = getText(obj, [/title/i, /video.?name/i]) || (caption ? caption.slice(0,90) : 'TikTok-video');
-      const kindText = Object.keys(obj).join(' ').toLowerCase();
-      const kind = /favorite|saved|bookmark|collect/i.test(kindText) ? 'saved' : defaultKind;
-      const key = url;
-      if (seen.has(key)) return;
-      seen.add(key);
-      items.push({url, caption, creator, title, kind, comments: extractComments(obj)});
+      const kind = isSavedPath(path) ? 'saved' : 'liked';
+      const comments = extractComments(obj);
+      const key = url.replace(/[?&](is_from_webapp|sender_device|web_id)=[^&]*/gi, '').replace(/[?&]$/, '');
+      const existing = byUrl.get(key);
+      if (existing) {
+        // If the same video appears in both collections, preserve both memberships.
+        if (existing.kind !== kind && existing.kind !== 'both') existing.kind = 'both';
+        if (!existing.caption && caption) existing.caption = caption;
+        if (!existing.creator && creator) existing.creator = creator;
+        if (!existing.comments.length && comments.length) existing.comments = comments;
+        return;
+      }
+      const item = {url, caption, creator, title, kind, comments};
+      byUrl.set(key, item);
+      items.push(item);
     }
     function walk(node, path='', depth=0) {
-      if (!node || depth>8) return;
+      if (!node || depth > 30) return;
       if (Array.isArray(node)) {
-        node.forEach(x => walk(x,path,depth+1));
+        node.forEach(x => walk(x, path, depth+1));
       } else if (typeof node === 'object') {
-        const p = path + ' ' + Object.keys(node).join(' ');
-        if (findUrl(node)) add(node, /favorite|saved|bookmark|collect/i.test(p) ? 'saved' : 'liked');
-        for (const [k,v] of Object.entries(node)) if (v && typeof v === 'object') walk(v, path+' '+k, depth+1);
+        const keys = Object.keys(node);
+        const nextPath = (path + ' ' + keys.join(' ')).slice(-4000);
+        if (findUrl(node)) add(node, path + ' ' + keys.join(' '));
+        for (const [k,v] of Object.entries(node)) {
+          if (v && typeof v === 'object') walk(v, path + ' ' + k, depth+1);
+        }
       }
     }
     walk(parsed);
-    return items;
+    // A video in both lists belongs in both tabs; no list membership is lost.
+    const expanded = [];
+    for (const item of items) {
+      if (item.kind === 'both') {
+        expanded.push({...item, kind:'liked'});
+        expanded.push({...item, kind:'saved'});
+      } else expanded.push(item);
+    }
+    return expanded;
   }
   function shuffle() {
     const arr = [...(data[collection] || [])];
@@ -242,7 +265,7 @@
       const parsed=JSON.parse(text);
       const items=parseItems(parsed);
       if (!items.length) {
-        $('notice').textContent='Ik vond geen TikTok-links in dit JSON-bestand. Probeer het JSON-bestand dat bij je TikTok-export hoort, niet het ZIP-bestand zelf.';
+        $('notice').textContent='Geen herkenbare TikTok-videolinks gevonden. Controleer of dit de JSON uit je TikTok-export is. Je mag het bestand met zowel Liked als Favorites tegelijk importeren; probeer anders het JSON-bestand hier te delen zodat we de structuur kunnen controleren.';
         $('notice').classList.remove('hidden'); return;
       }
       data={liked:items.filter(x=>x.kind==='liked'),saved:items.filter(x=>x.kind==='saved')};
